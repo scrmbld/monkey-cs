@@ -3,7 +3,7 @@ namespace Interpreter.UnitTests
     /// <summary>
     /// Tests lexing for all of the tokens that should just be a single char
     /// </summary>
-    public class OperatorShould
+    public class LexOperators
     {
         [Fact]
         public void LexerEq()
@@ -87,7 +87,7 @@ namespace Interpreter.UnitTests
 
     }
 
-    public class DelimiterShould
+    public class LexDelimiters
     {
         [Fact]
         public void LexerSemi()
@@ -147,7 +147,7 @@ namespace Interpreter.UnitTests
 
     }
 
-    public class LexerStrTokShould
+    public class LexKeywords
     {
         [Fact]
         public void LexerLet()
@@ -222,7 +222,7 @@ namespace Interpreter.UnitTests
         }
     }
 
-    public class CompoundShould()
+    public class LexCompound()
     {
         [Fact]
         void LexerLet()
@@ -281,6 +281,37 @@ namespace Interpreter.UnitTests
             }
 
             Assert.Equivalent(result, expected);
+        }
+    }
+
+    public class ParserTests
+    {
+        [Fact]
+        void ParseLet()
+        {
+            string input = "let x = 5;\nlet y = 10;\nlet foobar = 838383;";
+            Parser p = new Parser(new Lexer(input));
+            Program expected = new Program();
+            expected.Statements = new List<Statement>
+            {
+                new LetStatement(
+                    new Token(TokenType.Let, "let"),
+                    new Identifier(new Token(TokenType.Identifier, "x"), "x"),
+                    new IntLiteral(new Token(TokenType.Int, "5"), 5)
+                  ),
+                new LetStatement(
+                    new Token(TokenType.Let, "let"),
+                    new Identifier(new Token(TokenType.Identifier, "y"), "y"),
+                    new IntLiteral(new Token(TokenType.Int, "10"), 10)
+                  ),
+                new LetStatement(
+                    new Token(TokenType.Let, "let"),
+                    new Identifier(new Token(TokenType.Identifier, "foobar"), "foobar"),
+                    new IntLiteral(new Token(TokenType.Int, "8383"), 8383)
+                  )
+            };
+            Program result = p.ParseProgram();
+            Assert.Equivalent(expected, result);
         }
     }
 }
