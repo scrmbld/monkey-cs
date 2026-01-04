@@ -96,6 +96,27 @@ namespace Interpreter
         }
     }
 
+    public class BooleanLiteral : Expression
+    {
+        public Token Tok;
+        public bool Value;
+        public BooleanLiteral(Token tok, bool value)
+        {
+            Tok = tok;
+            Value = value;
+        }
+
+        public string TokenLiteral()
+        {
+            return Tok.Literal;
+        }
+
+        public override string ToString()
+        {
+            return $"(bool ({Value}))";
+        }
+    }
+
     public class PrefixOperator : Expression
     {
         public Token Tok;
@@ -157,6 +178,44 @@ namespace Interpreter
             sb.Append("\n  ");
             sb.Append(rhsString.ToString());
             sb.Append(")");
+            return sb.ToString();
+        }
+    }
+
+    public class IfExpression : Expression
+    {
+        public Token Tok;
+        public Expression Condition;
+        public Expression Consequence;
+        public Expression Otherwise;
+
+        public IfExpression(Token tok, Expression condition, Expression consequence, Expression otherwise)
+        {
+            Tok = tok;
+            Condition = condition;
+            Consequence = consequence;
+            Otherwise = otherwise;
+        }
+
+        public string TokenLiteral()
+        {
+            return Tok.Literal;
+        }
+
+        public override string ToString()
+        {
+            StringBuilder sb = new StringBuilder("(If\n  ");
+            StringBuilder condition = new StringBuilder(Condition.ToString());
+            condition.Replace("\n", "\n  ");
+            sb.Append($"{condition.ToString()}\n  ");
+            StringBuilder consequence = new StringBuilder(Consequence.ToString());
+            consequence.Replace("\n", "\n  ");
+            sb.Append($"{consequence.ToString()}\n  ");
+            StringBuilder otherwise = new StringBuilder(Otherwise.ToString());
+            otherwise.Replace("\n", "\n  ");
+            sb.Append($"{otherwise.ToString()}");
+            sb.Append(")");
+
             return sb.ToString();
         }
     }
@@ -231,7 +290,7 @@ namespace Interpreter
 
         public override string ToString()
         {
-            StringBuilder sb = new StringBuilder($"(expression_statement\n");
+            StringBuilder sb = new StringBuilder($"(expression_statement\n  ");
             StringBuilder valSb = new StringBuilder(Value.ToString());
             valSb.Replace("\n", "\n  ");
             sb.Append($"{valSb})");
@@ -244,14 +303,14 @@ namespace Interpreter
         private Dictionary<TokenType, Func<Expression?>> PrefixTable;
         private Dictionary<TokenType, Func<Expression, Expression?>> InfixTable;
         private Dictionary<TokenType, int> OperatorPrecedence = new Dictionary<TokenType, int> {
-            {TokenType.Equal, 1},
-            {TokenType.NotEqual, 1},
-            {TokenType.Less, 2},
-            {TokenType.Greater, 2},
-            {TokenType.Plus, 3},
-            {TokenType.Minus, 3},
-            {TokenType.Asterisk, 4},
-            {TokenType.Slash, 4}
+            {TokenType.Equal, Precedences.EQUALS},
+            {TokenType.NotEqual, Precedences.EQUALS},
+            {TokenType.Less, Precedences.LESSGREATER},
+            {TokenType.Greater, Precedences.LESSGREATER},
+            {TokenType.Plus, Precedences.SUM},
+            {TokenType.Minus, Precedences.SUM},
+            {TokenType.Asterisk, Precedences.PRODUCT},
+            {TokenType.Slash, Precedences.PRODUCT}
         };
 
         private Lexer Lex;
@@ -271,8 +330,12 @@ namespace Interpreter
             PrefixTable = new Dictionary<TokenType, Func<Expression?>>();
             PrefixTable.Add(TokenType.Identifier, ParseIdent);
             PrefixTable.Add(TokenType.Int, ParseInt);
+            PrefixTable.Add(TokenType.True, ParseBoolean);
+            PrefixTable.Add(TokenType.False, ParseBoolean);
             PrefixTable.Add(TokenType.Exclam, ParsePrefixOp);
             PrefixTable.Add(TokenType.Minus, ParsePrefixOp);
+            PrefixTable.Add(TokenType.LParen, ParseGrouped);
+            PrefixTable.Add(TokenType.If, ParseIf);
             InfixTable = new Dictionary<TokenType, Func<Expression, Expression?>>();
             InfixTable.Add(TokenType.Minus, ParseInfixOp);
             InfixTable.Add(TokenType.Plus, ParseInfixOp);
@@ -433,6 +496,13 @@ namespace Interpreter
             return result;
         }
 
+        private BooleanLiteral ParseBoolean()
+        {
+            BooleanLiteral result = new BooleanLiteral(CurrentToken, bool.Parse(CurrentToken.Literal));
+            NextToken();
+            return result;
+        }
+
         private Identifier ParseIdent()
         {
             Identifier result = new Identifier(CurrentToken, CurrentToken.Literal);
@@ -456,6 +526,22 @@ namespace Interpreter
             return null;
         }
 
+        private Expression? ParseGrouped()
+        {
+            NextToken();
+            Expression? exp = ParseExpression(Precedences.LOWEST);
+            if (CurrentToken.Type == TokenType.RParen)
+            {
+                NextToken();
+            }
+            else
+            {
+                PeekError(TokenType.RParen);
+            }
+
+            return exp;
+        }
+
         private InfixOperator? ParseInfixOp(Expression lhs)
         {
             Token opToken = CurrentToken;
@@ -471,6 +557,62 @@ namespace Interpreter
             }
 
             return null;
+        }
+
+        private IfExpression? ParseIf()
+        {
+            Token ifToken = CurrentToken;
+            ExpectPeek(TokenType.LParen);
+            NextToken();
+            Expression? condition = ParseExpression(Precedences.LOWEST);
+
+            if (condition == null)
+            {
+                return null;
+            }
+
+            if (CurrentToken.Type != TokenType.RParen)
+            {
+                CurrentError(TokenType.RParen);
+                return null;
+            }
+
+            ExpectPeek(TokenType.LBrace);
+            NextToken();
+
+            Expression? consequence = ParseExpression(Precedences.LOWEST);
+            if (consequence == null)
+            {
+                return null;
+            }
+
+            if (CurrentToken.Type != TokenType.RBrace)
+            {
+                CurrentError(TokenType.RBrace);
+                return null;
+            }
+
+            ExpectPeek(TokenType.Else);
+            ExpectPeek(TokenType.LBrace);
+            NextToken();
+
+            Expression? otherwise = ParseExpression(Precedences.LOWEST);
+
+            if (otherwise == null)
+            {
+                return null;
+            }
+
+            if (CurrentToken.Type != TokenType.RBrace)
+            {
+                CurrentError(TokenType.RBrace);
+                return null;
+            }
+            NextToken();
+
+            Console.WriteLine(CurrentToken.Type);
+
+            return new IfExpression(ifToken, condition, consequence, otherwise);
         }
 
         private int PeekPrecedence()
@@ -523,6 +665,18 @@ namespace Interpreter
             else
             {
                 ErrorsList.Add($"expected {t}, got {PeekToken.Type}");
+            }
+        }
+
+        private void CurrentError(TokenType t)
+        {
+            if (CurrentToken.Type == TokenType.Eof)
+            {
+                ErrorsList.Add($"expected {t}, got Eof");
+            }
+            else
+            {
+                ErrorsList.Add($"expected {t}, got {CurrentToken.Type}");
             }
         }
 

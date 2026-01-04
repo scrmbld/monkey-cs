@@ -651,5 +651,113 @@ namespace Interpreter.UnitTests
             Assert.Equivalent(expected, result);
             Assert.Empty(p.Errors());
         }
+
+        [Fact]
+        void ParseBoolean()
+        {
+            string input = "false;";
+            Parser p = new Parser(new Lexer(input));
+            Program result = p.ParseProgram();
+            Program expected = new Program();
+            expected.Statements = new List<Statement> {
+            new ExpressionStatement(
+                new Token(TokenType.False, "false"),
+                new BooleanLiteral(
+                    new Token(TokenType.False, "false"),
+                    false
+                    )
+                )
+            };
+
+            input = "true;";
+            p = new Parser(new Lexer(input));
+            result = p.ParseProgram();
+            expected = new Program();
+            expected.Statements = new List<Statement> {
+            new ExpressionStatement(
+                new Token(TokenType.True, "true"),
+                new BooleanLiteral(
+                    new Token(TokenType.True, "true"),
+                    true
+                )
+            )};
+        }
+
+        [Fact]
+        void ParseGrouped()
+        {
+            string input = "(3 + 4) * 7; ";
+            Parser p = new Parser(new Lexer(input));
+            Program result = p.ParseProgram();
+            Program expected = new Program();
+            expected.Statements = new List<Statement>() {
+                new ExpressionStatement(
+                    new Token(TokenType.LParen, "("),
+                    new InfixOperator(
+                        new Token(TokenType.Asterisk, "*"),
+                        "*",
+                        new InfixOperator(
+                            new Token(TokenType.Plus, "+"),
+                            "+",
+                            new IntLiteral(
+                                new Token(TokenType.Int, "3"),
+                                3
+                            ),
+                            new IntLiteral(
+                                new Token(TokenType.Int, "4"),
+                                4
+                            )
+                        ),
+                        new IntLiteral(
+                            new Token(TokenType.Int, "7"),
+                            7
+                        )
+                    )
+                )
+            };
+
+            Assert.Equivalent(expected, result);
+            Assert.Empty(p.Errors());
+        }
+
+        [Fact]
+        void ParseIf()
+        {
+            string input = "if (x > y) { x } else { y };";
+            Parser p = new Parser(new Lexer(input));
+            Program result = p.ParseProgram();
+            Program expected = new Program();
+            expected.Statements = new List<Statement> {
+                new ExpressionStatement(
+                    new Token(TokenType.If, "if"),
+                    new IfExpression(
+                        new Token(TokenType.If, "if"),
+                        new InfixOperator(
+                            new Token(TokenType.Greater, ">"),
+                            ">",
+                            new Identifier(
+                                new Token(TokenType.Identifier, "x"),
+                                "x"
+                            ),
+                            new Identifier(
+                                new Token(TokenType.Identifier, "y"),
+                                "y"
+                            )
+                        ),
+                        new Identifier(
+                            new Token(TokenType.Identifier, "x"),
+                            "x"
+                        ),
+                        new Identifier(
+                            new Token(TokenType.Identifier, "y"),
+                            "y"
+                        )
+                    )
+                )
+            };
+
+            Assert.Equivalent(expected, result);
+            Assert.Empty(p.Errors());
+        }
     }
 }
