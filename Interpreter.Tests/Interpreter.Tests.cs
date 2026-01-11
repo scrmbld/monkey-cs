@@ -759,5 +759,85 @@ namespace Interpreter.UnitTests
             Assert.Equivalent(expected, result);
             Assert.Empty(p.Errors());
         }
+        [Fact]
+        void ParseFunction()
+        {
+            string input = "fn(x, y) { return x + y; }";
+            Parser p = new Parser(new Lexer(input));
+            Program result = p.ParseProgram();
+            Program expected = new Program();
+            expected.Statements = new List<Statement> {
+                new ExpressionStatement(
+                    new Token(TokenType.Function, "fn"),
+                    new FunctionLiteral(
+                        new Token(TokenType.Function, "fn"),
+                        new List<Identifier> {
+                            new Identifier(
+                                    new Token(TokenType.Identifier, "x"),
+                                    "x"
+                                    ),
+                            new Identifier(
+                                new Token(TokenType.Identifier, "y"),
+                                "y"
+                            )
+                        },
+                        new List<Statement>
+                        {
+                            new ReturnStatement(
+                                new Token(TokenType.Return, "return"),
+                                new InfixOperator(
+                                    new Token(TokenType.Plus, "+"),
+                                    "+",
+                                    new Identifier(
+                                        new Token(TokenType.Identifier, "x"),
+                                        "x"
+                                    ),
+                                    new Identifier(
+                                        new Token(TokenType.Identifier, "y"),
+                                        "y"
+                                    )
+                                )
+                            )
+                        }
+                    )
+                )
+            };
+
+            Assert.Equivalent(expected, result);
+            Assert.Empty(p.Errors());
+        }
+
+        [Fact]
+        void ParseCall()
+        {
+            string input = "add(1, 2)";
+            Parser p = new Parser(new Lexer(input));
+            Program result = p.ParseProgram();
+            Program expected = new Program();
+            expected.Statements = new List<Statement> {
+                new ExpressionStatement(
+                    new Token(TokenType.Identifier, "add"),
+                    new Call(
+                        new Token(TokenType.LParen, "("),
+                        new Identifier(
+                            new Token(TokenType.Identifier, "add"),
+                            "add"
+                        ),
+                        new List<Expression> {
+                            new IntLiteral(
+                                new Token(TokenType.Int, "1"),
+                                1
+                            ),
+                            new IntLiteral(
+                                new Token(TokenType.Int, "2"),
+                                2
+                            )
+                        }
+                    )
+                )
+            };
+            Assert.Equivalent(expected, result);
+            Assert.Empty(p.Errors());
+        }
     }
 }

@@ -117,6 +117,98 @@ namespace Interpreter
         }
     }
 
+    public class FunctionLiteral : Expression
+    {
+        public Token Tok;
+        public List<Identifier> Args;
+        public List<Statement> Body;
+
+        public FunctionLiteral(Token tok, List<Identifier> args, List<Statement> body)
+        {
+            Tok = tok;
+            Args = args;
+            Body = body;
+        }
+
+        public string TokenLiteral()
+        {
+            return Tok.Literal;
+        }
+
+        public override string ToString()
+        {
+            StringBuilder sb = new StringBuilder("(function_definition\n  ");
+
+            StringBuilder args = new StringBuilder("(args\n");
+            foreach (Identifier a in Args)
+            {
+                args.Append("    ");
+                args.AppendLine(a.ToString());
+            }
+
+            args.Append("  )\n  ");
+
+            sb.Append(args);
+
+            StringBuilder body = new StringBuilder("(body\n");
+            foreach (Statement s in Body)
+            {
+                body.Append("    ");
+                StringBuilder sIndent = new StringBuilder(s.ToString());
+                sIndent.Replace("\n", "\n    ");
+                body.AppendLine(sIndent.ToString());
+            }
+
+            body.Append("  )");
+
+            sb.Append(body);
+            sb.Append(")");
+
+            return sb.ToString();
+        }
+    }
+
+    public class Call : Expression
+    {
+        public Token Tok;
+        public Expression Function;
+        public List<Expression> Args;
+
+        public Call(Token tok, Expression function, List<Expression> args)
+        {
+            Tok = tok;
+            Function = function;
+            Args = args;
+        }
+
+        public string TokenLiteral()
+        {
+            return Tok.Literal;
+        }
+
+        public override string ToString()
+        {
+            StringBuilder sb = new StringBuilder("(call\n  ");
+
+            StringBuilder function = new StringBuilder(Function.ToString());
+            function.Replace("\n", "\n    ");
+            sb.Append(function);
+            sb.Append("\n  (args");
+
+            foreach (Expression arg in Args)
+            {
+                StringBuilder argsb = new StringBuilder(arg.ToString());
+                argsb.Replace("\n", "\n      ");
+                sb.Append("\n    ");
+                sb.Append(argsb);
+            }
+
+            sb.Append(')');
+
+            return sb.ToString();
+        }
+    }
+
     public class PrefixOperator : Expression
     {
         public Token Tok;
@@ -204,7 +296,7 @@ namespace Interpreter
 
         public override string ToString()
         {
-            StringBuilder sb = new StringBuilder("(If\n  ");
+            StringBuilder sb = new StringBuilder("(if\n  ");
             StringBuilder condition = new StringBuilder(Condition.ToString());
             condition.Replace("\n", "\n  ");
             sb.Append($"{condition.ToString()}\n  ");
@@ -268,7 +360,13 @@ namespace Interpreter
 
         public override string ToString()
         {
-            return $"(return_statement\n  {Value})";
+            StringBuilder sb = new StringBuilder("(return_statement\n  ");
+            StringBuilder value = new StringBuilder(Value.ToString());
+            value.Replace("\n", "\n  ");
+            sb.Append(value.ToString());
+            sb.Append(")");
+
+            return sb.ToString();
         }
     }
 
@@ -310,7 +408,8 @@ namespace Interpreter
             {TokenType.Plus, Precedences.SUM},
             {TokenType.Minus, Precedences.SUM},
             {TokenType.Asterisk, Precedences.PRODUCT},
-            {TokenType.Slash, Precedences.PRODUCT}
+            {TokenType.Slash, Precedences.PRODUCT},
+            {TokenType.LParen, Precedences.CALL}
         };
 
         private Lexer Lex;
@@ -330,6 +429,7 @@ namespace Interpreter
             PrefixTable = new Dictionary<TokenType, Func<Expression?>>();
             PrefixTable.Add(TokenType.Identifier, ParseIdent);
             PrefixTable.Add(TokenType.Int, ParseInt);
+            PrefixTable.Add(TokenType.Function, ParseFunction);
             PrefixTable.Add(TokenType.True, ParseBoolean);
             PrefixTable.Add(TokenType.False, ParseBoolean);
             PrefixTable.Add(TokenType.Exclam, ParsePrefixOp);
@@ -345,6 +445,7 @@ namespace Interpreter
             InfixTable.Add(TokenType.NotEqual, ParseInfixOp);
             InfixTable.Add(TokenType.Less, ParseInfixOp);
             InfixTable.Add(TokenType.Greater, ParseInfixOp);
+            InfixTable.Add(TokenType.LParen, ParseCall);
         }
 
         private void NextToken()
@@ -364,7 +465,10 @@ namespace Interpreter
                 {
                     program.Statements.Add(s);
                 }
-                NextToken();
+                else
+                {
+                    break;
+                }
             }
             return program;
         }
@@ -403,6 +507,7 @@ namespace Interpreter
             {
                 if (CurrentToken.Type == TokenType.Semicolon)
                 {
+                    NextToken();
                     return new LetStatement(letToken, varName, exp);
                 }
                 else
@@ -410,6 +515,8 @@ namespace Interpreter
                     PeekError(TokenType.Semicolon);
                 }
             }
+
+            ExpressionError();
             return null;
         }
 
@@ -422,6 +529,7 @@ namespace Interpreter
             {
                 if (CurrentToken.Type == TokenType.Semicolon)
                 {
+                    NextToken();
                     return new ReturnStatement(returnToken, e);
                 }
                 else
@@ -430,6 +538,7 @@ namespace Interpreter
                 }
             }
 
+            ExpressionError();
             return null;
         }
 
@@ -459,7 +568,6 @@ namespace Interpreter
                 Expression? leftExp = prefix();
                 if (leftExp == null)
                 {
-                    ErrorsList.Add($"Invalid expression {CurrentToken.Literal}...");
                     return null;
                 }
 
@@ -508,6 +616,128 @@ namespace Interpreter
             Identifier result = new Identifier(CurrentToken, CurrentToken.Literal);
             NextToken();
             return result;
+        }
+
+        private FunctionLiteral? ParseFunction()
+        {
+            Token fnToken = CurrentToken;
+            List<Identifier> args = new List<Identifier>();
+            List<Statement> body = new List<Statement>();
+
+            // parse arguments
+
+            ExpectPeek(TokenType.LParen);
+            NextToken();
+            if (CurrentToken.Type != TokenType.RParen && CurrentToken.Type != TokenType.Identifier)
+            {
+                if (CurrentToken.Type == TokenType.Eof)
+                {
+                    ErrorsList.Add("Expected ')' or identifier, found Eof");
+                }
+                else
+                {
+                    ErrorsList.Add($"Expected ')' or identifier, found {CurrentToken.Literal}");
+                }
+
+                return null;
+            }
+
+            while (CurrentToken.Type != TokenType.RParen)
+            {
+                Identifier nextArg = ParseIdent();
+                args.Add(nextArg);
+
+                if (CurrentToken.Type == TokenType.RParen)
+                {
+                    break;
+                }
+
+                if (CurrentToken.Type != TokenType.Comma)
+                {
+                    CurrentError(TokenType.Comma);
+                    return null;
+                }
+
+                NextToken();
+                if (CurrentToken.Type != TokenType.Identifier)
+                {
+                    CurrentError(TokenType.Identifier);
+                    return null;
+                }
+            }
+
+            if (CurrentToken.Type != TokenType.RParen)
+            {
+                CurrentError(TokenType.RParen);
+                return null;
+            }
+
+            // parse body
+
+            ExpectPeek(TokenType.LBrace);
+            NextToken();
+            while (CurrentToken.Type != TokenType.RBrace && CurrentToken.Type != TokenType.Eof)
+            {
+                Statement? nextStatement = ParseStatement();
+                if (nextStatement == null)
+                {
+                    return null;
+                }
+
+                body.Add(nextStatement);
+            }
+
+            if (CurrentToken.Type != TokenType.RBrace)
+            {
+                CurrentError(TokenType.RBrace);
+                return null;
+            }
+            NextToken();
+
+            return new FunctionLiteral(fnToken, args, body);
+        }
+
+        private Call? ParseCall(Expression lhs)
+        {
+            Token callToken = CurrentToken;
+            List<Expression> args = new List<Expression>();
+            NextToken();
+
+            // TODO: parse arguments that aren't identifiers
+
+            while (CurrentToken.Type != TokenType.RParen)
+            {
+                Expression? nextArg = ParseExpression(Precedences.LOWEST);
+                if (nextArg == null)
+                {
+                    ExpressionError();
+                    return null;
+                }
+
+                args.Add(nextArg);
+
+                if (CurrentToken.Type == TokenType.RParen)
+                {
+                    break;
+                }
+
+                if (CurrentToken.Type != TokenType.Comma)
+                {
+                    CurrentError(TokenType.Comma);
+                    return null;
+                }
+
+                NextToken();
+            }
+
+            if (CurrentToken.Type != TokenType.RParen)
+            {
+                CurrentError(TokenType.RParen);
+                return null;
+            }
+            NextToken();
+
+            return new Call(callToken, lhs, args);
         }
 
         private PrefixOperator? ParsePrefixOp()
@@ -568,6 +798,7 @@ namespace Interpreter
 
             if (condition == null)
             {
+                ExpressionError();
                 return null;
             }
 
@@ -583,6 +814,7 @@ namespace Interpreter
             Expression? consequence = ParseExpression(Precedences.LOWEST);
             if (consequence == null)
             {
+                ExpressionError();
                 return null;
             }
 
@@ -600,6 +832,7 @@ namespace Interpreter
 
             if (otherwise == null)
             {
+                ExpressionError();
                 return null;
             }
 
@@ -678,6 +911,11 @@ namespace Interpreter
             {
                 ErrorsList.Add($"expected {t}, got {CurrentToken.Type}");
             }
+        }
+
+        private void ExpressionError()
+        {
+            ErrorsList.Add($"Invalid expression: '{CurrentToken.Literal}'");
         }
 
         public List<string> Errors()
