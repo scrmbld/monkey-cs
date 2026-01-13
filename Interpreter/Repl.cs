@@ -21,22 +21,39 @@ namespace Repl
             Lexer l = new Lexer(line);
             Parser p = new Parser(l);
             Interpreter.Program prog = p.ParseProgram();
-            foreach (string e in p.Errors())
+            foreach (string err in p.Errors())
             {
-                Console.WriteLine(e);
+                Console.WriteLine(err);
             }
             Console.WriteLine(prog);
         }
 
+        private static void EvalLine(string line, Interpreter.Environment env)
+        {
+            Parser p = new Parser(new Lexer(line));
+            Node program = p.ParseProgram();
+            foreach (string err in p.Errors())
+            {
+                Console.WriteLine(err);
+            }
+
+            Evaluator e = new Evaluator();
+
+            MonkeyObject result = e.Eval(program, env);
+
+            Console.WriteLine(result);
+        }
+
         public static void Start()
         {
+            Interpreter.Environment env = new Interpreter.Environment();
             Console.Write(PROMPT);
             while (true)
             {
                 string? s = Console.ReadLine();
                 if (s is { } line)
                 {
-                    ParseLine(line);
+                    EvalLine(line, env);
                 }
                 else
                 {

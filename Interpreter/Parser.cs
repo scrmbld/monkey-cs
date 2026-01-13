@@ -278,10 +278,10 @@ namespace Interpreter
     {
         public Token Tok;
         public Expression Condition;
-        public Expression Consequence;
-        public Expression Otherwise;
+        public List<Statement> Consequence;
+        public List<Statement> Otherwise;
 
-        public IfExpression(Token tok, Expression condition, Expression consequence, Expression otherwise)
+        public IfExpression(Token tok, Expression condition, List<Statement> consequence, List<Statement> otherwise)
         {
             Tok = tok;
             Condition = condition;
@@ -298,15 +298,32 @@ namespace Interpreter
         {
             StringBuilder sb = new StringBuilder("(if\n  ");
             StringBuilder condition = new StringBuilder(Condition.ToString());
-            condition.Replace("\n", "\n  ");
+            condition.Replace("\n", "\n    ");
             sb.Append($"{condition.ToString()}\n  ");
-            StringBuilder consequence = new StringBuilder(Consequence.ToString());
-            consequence.Replace("\n", "\n  ");
-            sb.Append($"{consequence.ToString()}\n  ");
-            StringBuilder otherwise = new StringBuilder(Otherwise.ToString());
-            otherwise.Replace("\n", "\n  ");
-            sb.Append($"{otherwise.ToString()}");
-            sb.Append(")");
+
+            StringBuilder consequence = new StringBuilder("(consequence");
+            foreach (Statement statement in Consequence)
+            {
+                consequence.Append("\n    ");
+                StringBuilder statementString = new StringBuilder(statement.ToString());
+                statementString.Replace("\n", "\n      ");
+                consequence.Append(statementString);
+            }
+
+            sb.Append(consequence);
+            sb.Append("\n  ");
+
+            StringBuilder otherwise = new StringBuilder("(otherwise");
+            foreach (Statement statement in Otherwise)
+            {
+                otherwise.Append("\n    ");
+                StringBuilder statementString = new StringBuilder(statement.ToString());
+                statementString.Replace("\n", "\n      ");
+                otherwise.Append(statementString);
+            }
+
+            sb.Append(otherwise);
+            sb.Append("\n  ");
 
             return sb.ToString();
         }
@@ -811,11 +828,16 @@ namespace Interpreter
             ExpectPeek(TokenType.LBrace);
             NextToken();
 
-            Expression? consequence = ParseExpression(Precedences.LOWEST);
-            if (consequence == null)
+            List<Statement> consequence = new List<Statement>();
+            while (CurrentToken.Type != TokenType.RBrace && CurrentToken.Type != TokenType.Eof)
             {
-                ExpressionError();
-                return null;
+                Statement? nextStatement = ParseStatement();
+                if (nextStatement == null)
+                {
+                    return null;
+                }
+
+                consequence.Add(nextStatement);
             }
 
             if (CurrentToken.Type != TokenType.RBrace)
@@ -823,17 +845,27 @@ namespace Interpreter
                 CurrentError(TokenType.RBrace);
                 return null;
             }
+            NextToken();
 
-            ExpectPeek(TokenType.Else);
+
+            if (CurrentToken.Type != TokenType.Else)
+            {
+                CurrentError(TokenType.Else);
+                return null;
+            }
             ExpectPeek(TokenType.LBrace);
             NextToken();
 
-            Expression? otherwise = ParseExpression(Precedences.LOWEST);
-
-            if (otherwise == null)
+            List<Statement> otherwise = new List<Statement>();
+            while (CurrentToken.Type != TokenType.RBrace && CurrentToken.Type != TokenType.Eof)
             {
-                ExpressionError();
-                return null;
+                Statement? nextStatement = ParseStatement();
+                if (nextStatement == null)
+                {
+                    return null;
+                }
+
+                otherwise.Add(nextStatement);
             }
 
             if (CurrentToken.Type != TokenType.RBrace)
@@ -842,8 +874,6 @@ namespace Interpreter
                 return null;
             }
             NextToken();
-
-            Console.WriteLine(CurrentToken.Type);
 
             return new IfExpression(ifToken, condition, consequence, otherwise);
         }

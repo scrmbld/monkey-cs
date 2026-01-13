@@ -744,14 +744,26 @@ namespace Interpreter.UnitTests
                                 "y"
                             )
                         ),
-                        new Identifier(
-                            new Token(TokenType.Identifier, "x"),
-                            "x"
-                        ),
-                        new Identifier(
-                            new Token(TokenType.Identifier, "y"),
-                            "y"
-                        )
+                        new List<Statement>
+                        {
+                            new ExpressionStatement(
+                                new Token(TokenType.Identifier, "x"),
+                                new Identifier(
+                                    new Token(TokenType.Identifier, "x"),
+                                    "x"
+                                )
+                            )
+                        },
+                        new List<Statement>
+                        {
+                            new ExpressionStatement(
+                                new Token(TokenType.Identifier, "y"),
+                                new Identifier(
+                                    new Token(TokenType.Identifier, "y"),
+                                    "y"
+                                )
+                            )
+                        }
                     )
                 )
             };
@@ -838,6 +850,248 @@ namespace Interpreter.UnitTests
             };
             Assert.Equivalent(expected, result);
             Assert.Empty(p.Errors());
+        }
+    }
+
+    public class EvalTests()
+    {
+        [Fact]
+        void EvalInt()
+        {
+            string input = "5;";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MInt(5);
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void EvalBool()
+        {
+            string input = "true";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MBool(true);
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void EvalBang()
+        {
+            string input = "!false";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MBool(true);
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void EvalNegative()
+        {
+            string input = "-5;";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MInt(-5);
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void EvalPlus()
+        {
+            string input = "5 + 3;";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MInt(8);
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void EvalMinus()
+        {
+            string input = "5 - 3;";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MInt(2);
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void EvalTimes()
+        {
+            string input = "5 * 3;";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MInt(15);
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void EvalDivide()
+        {
+            string input = "15 / 3;";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MInt(5);
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void EvalEqual()
+        {
+            string input = "15 == 3;";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MBool(false);
+            Assert.Equivalent(expected, result);
+
+            input = "15 == 15;";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MBool(true);
+            Assert.Equivalent(expected, result);
+
+            input = "fn(x) { return x; } == fn(y) { return y; }";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MError("Interpreter.MFunction is not comparable");
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void EvalNotEqual()
+        {
+            string input = "15 != 3;";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MBool(true);
+            Assert.Equivalent(expected, result);
+
+            input = "15 != 15;";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MBool(false);
+            Assert.Equivalent(expected, result);
+
+            input = "fn(x) { return x; } != fn(y) { return y; }";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MError("Interpreter.MFunction is not comparable");
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void EvalLess()
+        {
+            string input = "15 < 3;";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MBool(false);
+            Assert.Equivalent(expected, result);
+
+            input = "3 < 15;";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MBool(true);
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void EvalGreater()
+        {
+            string input = "15 > 3;";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MBool(true);
+            Assert.Equivalent(expected, result);
+
+            input = "3 > 15;";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MBool(false);
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void EvalIf()
+        {
+            string input = "if (3 < 4) { 17 } else { 2 };";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MInt(17);
+            Assert.Equivalent(expected, result);
+
+            input = "if (3 > 4) { 17 } else { 2 };";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MInt(2);
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void EvalReturn()
+        {
+            string input = "return 4; 5;";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MInt(4);
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void EvalLet()
+        {
+            string input = "let x = 2; x;";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MInt(2);
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void EvalFunction()
+        {
+            string input = "fn(x) { x }(2)";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MInt(2);
+            Assert.Equivalent(expected, result);
+
+            input = "let y = 4; let f = fn() { y }; return f(); let y = 7;";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MInt(4);
+            Assert.Equivalent(expected, result);
+
+            input = "let y = 4; let f = fn() { y }; let y = 7; f()";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MInt(4);
+            Assert.Equivalent(expected, result);
         }
     }
 }
