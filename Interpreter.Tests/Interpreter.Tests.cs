@@ -147,6 +147,25 @@ namespace Interpreter.UnitTests
 
     }
 
+    public class LexValues
+    {
+        [Fact]
+        public void LexInt()
+        {
+            Lexer l = new Lexer("27");
+            Token result = l.NextToken();
+            Assert.Equivalent(new Token(TokenType.Int, "27"), result);
+        }
+
+        [Fact]
+        public void LexString()
+        {
+            Lexer l = new Lexer("\"Hello World!\"");
+            Token result = l.NextToken();
+            Assert.Equivalent(new Token(TokenType.String, "\"Hello World!\""), result);
+        }
+    }
+
     public class LexKeywords
     {
         [Fact]
@@ -407,6 +426,24 @@ namespace Interpreter.UnitTests
         }
 
         [Fact]
+        void ParseString()
+        {
+            string input = "\"Hello World!\"";
+            Parser p = new Parser(new Lexer(input));
+            Program result = p.ParseProgram();
+            Program expected = new Program();
+            expected.Statements = new List<Statement> {
+                new ExpressionStatement(
+                    new Token(TokenType.String, "\"Hello World!\""),
+                    new StringLiteral(new Token(TokenType.String, "\"Hello World!\""), "Hello World!")
+                )
+            };
+
+            Assert.Empty(p.Errors());
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
         void ParsePrefix()
         {
             string input = "!x";
@@ -554,6 +591,31 @@ namespace Interpreter.UnitTests
             };
             Assert.Equivalent(expected, result);
             Assert.Empty(p.Errors());
+
+            input = "\"Hello \" ^ \"World\"";
+            p = new Parser(new Lexer(input));
+            result = p.ParseProgram();
+            expected = new Program();
+            expected.Statements = new List<Statement> {
+            new ExpressionStatement(
+                new Token(TokenType.String, "\"Hello \""),
+                new InfixOperator(
+                    new Token(TokenType.Caret, "^"),
+                    "^",
+                    new StringLiteral(
+                        new Token(TokenType.String, "\"Hello \""),
+                        "Hello "
+                        ),
+                    new StringLiteral(
+                        new Token(TokenType.String, "\"World\""),
+                        "World"
+                        )
+                    )
+                )
+            };
+            Assert.Equivalent(expected, result);
+            Assert.Empty(p.Errors());
+
 
             input = "7 == y";
             p = new Parser(new Lexer(input));
@@ -878,6 +940,17 @@ namespace Interpreter.UnitTests
         }
 
         [Fact]
+        void EvalString()
+        {
+            string input = "\"Hello World!\"";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MString("Hello World!");
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
         void EvalBang()
         {
             string input = "!false";
@@ -944,6 +1017,17 @@ namespace Interpreter.UnitTests
         }
 
         [Fact]
+        void EvalConcat()
+        {
+            string input = "\"Hello \" ^ \"World!\"";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MString("Hello World!");
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
         void EvalEqual()
         {
             string input = "15 == 3;";
@@ -960,11 +1044,18 @@ namespace Interpreter.UnitTests
             expected = new MBool(true);
             Assert.Equivalent(expected, result);
 
+            input = "\"Hello\" == \"Hello\";";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MBool(true);
+            Assert.Equivalent(expected, result);
+
             input = "fn(x) { return x; } == fn(y) { return y; }";
             p = new Parser(new Lexer(input));
             e = new Evaluator();
             result = e.Eval(p.ParseProgram(), new Environment());
-            expected = new MError("Interpreter.MFunction is not comparable");
+            expected = new MBool(false);
             Assert.Equivalent(expected, result);
         }
 
@@ -985,11 +1076,18 @@ namespace Interpreter.UnitTests
             expected = new MBool(false);
             Assert.Equivalent(expected, result);
 
+            input = "\"Hello\" != \"Hello\";";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MBool(false);
+            Assert.Equivalent(expected, result);
+
             input = "fn(x) { return x; } != fn(y) { return y; }";
             p = new Parser(new Lexer(input));
             e = new Evaluator();
             result = e.Eval(p.ParseProgram(), new Environment());
-            expected = new MError("Interpreter.MFunction is not comparable");
+            expected = new MBool(true);
             Assert.Equivalent(expected, result);
         }
 
@@ -1009,6 +1107,20 @@ namespace Interpreter.UnitTests
             result = e.Eval(p.ParseProgram(), new Environment());
             expected = new MBool(true);
             Assert.Equivalent(expected, result);
+
+            input = "\"a\" < \"b\";";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MBool(true);
+            Assert.Equivalent(expected, result);
+
+            input = "\"b\" < \"a\";";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MBool(false);
+            Assert.Equivalent(expected, result);
         }
 
         [Fact]
@@ -1026,6 +1138,20 @@ namespace Interpreter.UnitTests
             e = new Evaluator();
             result = e.Eval(p.ParseProgram(), new Environment());
             expected = new MBool(false);
+            Assert.Equivalent(expected, result);
+
+            input = "\"a\" > \"b\";";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MBool(false);
+            Assert.Equivalent(expected, result);
+
+            input = "\"b\" > \"a\";";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MBool(true);
             Assert.Equivalent(expected, result);
         }
 

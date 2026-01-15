@@ -5,9 +5,10 @@
         Illegal,
         Eof,
 
-        // identifiers and literals
+        // Literals and identifiers
         Identifier,
         Int,
+        String,
 
         // operators
         Assign,
@@ -20,6 +21,7 @@
         Minus,
         Asterisk,
         Slash,
+        Caret,
 
         // delimiters
         Comma,
@@ -59,7 +61,7 @@
         // index we will read next
         private int ReadPosition;
         // the previously read character
-        char ch;
+        char Ch;
 
         public Lexer(string text)
         {
@@ -73,12 +75,12 @@
         {
             if (ReadPosition >= Source.Length)
             {
-                ch = '\0';
+                Ch = '\0';
                 Position = ReadPosition;
             }
             else
             {
-                ch = Source[ReadPosition];
+                Ch = Source[ReadPosition];
                 Position = ReadPosition;
                 ReadPosition++;
             }
@@ -100,7 +102,7 @@
         {
             int startPos = Position;
 
-            while (Char.IsLetter(ch))
+            while (Char.IsLetter(Ch))
             {
                 ReadChar();
             }
@@ -112,7 +114,7 @@
         {
             int startPos = Position;
 
-            while (Char.IsDigit(ch))
+            while (Char.IsDigit(Ch))
             {
                 ReadChar();
             }
@@ -120,9 +122,22 @@
             return Source.Substring(startPos, Position - startPos);
         }
 
+        private string ReadString()
+        {
+            int startPos = Position;
+            ReadChar();
+            while (Ch != '"')
+            {
+                ReadChar();
+            }
+            ReadChar();
+
+            return Source.Substring(startPos, Position - startPos);
+        }
+
         private void ConsumeWhitespace()
         {
-            while (String.IsNullOrWhiteSpace(ch.ToString()) && ch != '\0')
+            while (String.IsNullOrWhiteSpace(Ch.ToString()) && Ch != '\0')
             {
                 ReadChar();
             }
@@ -141,30 +156,31 @@
         {
             ConsumeWhitespace();
 
-            Token? tok = ch switch
+            Token? tok = Ch switch
             {
                 '=' => PeekChar() switch
                 {
                     '=' => CreateAndJumpOver(new Token(TokenType.Equal, "=="), 1),
-                    _ => new Token(TokenType.Assign, ch.ToString())
+                    _ => new Token(TokenType.Assign, Ch.ToString())
                 },
-                '<' => new Token(TokenType.Less, ch.ToString()),
-                '>' => new Token(TokenType.Greater, ch.ToString()),
+                '<' => new Token(TokenType.Less, Ch.ToString()),
+                '>' => new Token(TokenType.Greater, Ch.ToString()),
                 '!' => PeekChar() switch
                 {
                     '=' => CreateAndJumpOver(new Token(TokenType.NotEqual, "!="), 1),
-                    _ => new Token(TokenType.Exclam, ch.ToString())
+                    _ => new Token(TokenType.Exclam, Ch.ToString())
                 },
-                '+' => new Token(TokenType.Plus, ch.ToString()),
-                '-' => new Token(TokenType.Minus, ch.ToString()),
-                '*' => new Token(TokenType.Asterisk, ch.ToString()),
-                '/' => new Token(TokenType.Slash, ch.ToString()),
-                ';' => new Token(TokenType.Semicolon, ch.ToString()),
-                '(' => new Token(TokenType.LParen, ch.ToString()),
-                ')' => new Token(TokenType.RParen, ch.ToString()),
-                '{' => new Token(TokenType.LBrace, ch.ToString()),
-                '}' => new Token(TokenType.RBrace, ch.ToString()),
-                ',' => new Token(TokenType.Comma, ch.ToString()),
+                '+' => new Token(TokenType.Plus, Ch.ToString()),
+                '-' => new Token(TokenType.Minus, Ch.ToString()),
+                '*' => new Token(TokenType.Asterisk, Ch.ToString()),
+                '/' => new Token(TokenType.Slash, Ch.ToString()),
+                '^' => new Token(TokenType.Caret, Ch.ToString()),
+                ';' => new Token(TokenType.Semicolon, Ch.ToString()),
+                '(' => new Token(TokenType.LParen, Ch.ToString()),
+                ')' => new Token(TokenType.RParen, Ch.ToString()),
+                '{' => new Token(TokenType.LBrace, Ch.ToString()),
+                '}' => new Token(TokenType.RBrace, Ch.ToString()),
+                ',' => new Token(TokenType.Comma, Ch.ToString()),
                 '\0' => new Token(TokenType.Eof, ""),
                 _ => null,
             };
@@ -177,7 +193,7 @@
                 }
             }
 
-            if (Char.IsLetter(ch))
+            if (Char.IsLetter(Ch))
             {
                 string literal = ReadIdentifier();
                 return literal switch
@@ -192,14 +208,20 @@
                     _ => new Token(TokenType.Identifier, literal),
                 };
             }
-            else if (Char.IsDigit(ch))
+            else if (Char.IsDigit(Ch))
             {
                 string literal = ReadInt();
                 return new Token(TokenType.Int, literal);
             }
+            else if (Ch == '"')
+            {
+                string literal = ReadString();
+                return new Token(TokenType.String, literal);
+            }
             else
             {
-                return new Token(TokenType.Illegal, ch.ToString());
+                return new Token(TokenType.Illegal, Ch.ToString());
+
             }
         }
     }

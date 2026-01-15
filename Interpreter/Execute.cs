@@ -39,6 +39,7 @@ namespace Interpreter
     {
         MInt,
         MBool,
+        MString,
         MFunction,
         MNull,
         // wrap return values so we can implement return control flow
@@ -121,6 +122,31 @@ namespace Interpreter
         public string Inspect()
         {
             return Value.ToString();
+        }
+
+        public override string ToString()
+        {
+            return Inspect();
+        }
+    }
+
+    public class MString : MonkeyObject
+    {
+        public string Value;
+
+        public MString(string value)
+        {
+            Value = value;
+        }
+
+        public MonkeyObjType ObjectType()
+        {
+            return MonkeyObjType.MString;
+        }
+
+        public string Inspect()
+        {
+            return $"\"{Value}\"";
         }
 
         public override string ToString()
@@ -247,6 +273,8 @@ namespace Interpreter
                     return EvalIntLiteral(i);
                 case BooleanLiteral b:
                     return EvalBooleanLiteral(b);
+                case StringLiteral s:
+                    return EvalStringLiteral(s);
                 case FunctionLiteral f:
                     return EvalFunctionLiteral(f, env);
                 case PrefixOperator op:
@@ -343,6 +371,11 @@ namespace Interpreter
             return new MBool(b.Value);
         }
 
+        private MonkeyObject EvalStringLiteral(StringLiteral s)
+        {
+            return new MString(s.Value);
+        }
+
         private MonkeyObject EvalFunctionLiteral(FunctionLiteral f, Environment env)
         {
             return new MFunction(f, env);
@@ -411,6 +444,8 @@ namespace Interpreter
                     return EvalTimesOp(op, env);
                 case "/":
                     return EvalDivideOp(op, env);
+                case "^":
+                    return EvalConcatOp(op, env);
                 case "==":
                     return EvalEqualOp(op, env);
                 case "!=":
@@ -516,34 +551,47 @@ namespace Interpreter
             }
         }
 
+        private MonkeyObject EvalConcatOp(InfixOperator op, Environment env)
+        {
+            MonkeyObject lhs = Eval(op.Lhs, env);
+            MonkeyObject rhs = Eval(op.Rhs, env);
+
+            if (lhs is MString l && rhs is MString r)
+            {
+                return new MString(l.Value + r.Value);
+            }
+            else if (!(lhs is MNull) && !(lhs is MString))
+            {
+                return TypeError(MonkeyObjType.MString, lhs);
+            }
+            else if (!(rhs is MNull) && !(rhs is MString))
+            {
+                return TypeError(MonkeyObjType.MString, rhs);
+            }
+            else
+            {
+                return new MNull();
+            }
+
+        }
+
         private MonkeyObject EvalEqualOp(InfixOperator op, Environment env)
         {
             MonkeyObject lhs = Eval(op.Lhs, env);
             MonkeyObject rhs = Eval(op.Rhs, env);
 
-            if (lhs is MInt lInt && rhs is MInt rInt)
+            switch (lhs, rhs)
             {
-                return new MBool(lInt.Value == rInt.Value);
-            }
-            else if (lhs is MBool lBool && rhs is MBool rBool)
-            {
-                return new MBool(lBool.Value == rBool.Value);
-            }
-            else if (lhs is MNull && rhs is MNull)
-            {
-                return new MBool(true);
-            }
-            else if (!(lhs is MBool) && !(lhs is MInt) && !(lhs is MNull))
-            {
-                return new MError($"{lhs.GetType()} is not comparable");
-            }
-            else if (!(rhs is MBool) && !(rhs is MBool) && !(rhs is MNull))
-            {
-                return new MError($"{rhs.GetType()} is not comparable");
-            }
-            else
-            {
-                return new MBool(false);
+                case (MInt lInt, MInt rInt):
+                    return new MBool(lInt.Value == rInt.Value);
+                case (MBool lBool, MBool rBool):
+                    return new MBool(lBool.Value == rBool.Value);
+                case (MString lString, MString rString):
+                    return new MBool(lString.Value == rString.Value);
+                case (MNull, MNull):
+                    return new MBool(true);
+                default:
+                    return new MBool(false);
             }
         }
 
@@ -552,29 +600,18 @@ namespace Interpreter
             MonkeyObject lhs = Eval(op.Lhs, env);
             MonkeyObject rhs = Eval(op.Rhs, env);
 
-            if (lhs is MInt lInt && rhs is MInt rInt)
+            switch (lhs, rhs)
             {
-                return new MBool(lInt.Value != rInt.Value);
-            }
-            else if (lhs is MBool lBool && rhs is MBool rBool)
-            {
-                return new MBool(lBool.Value != rBool.Value);
-            }
-            else if (lhs is MNull && rhs is MNull)
-            {
-                return new MBool(false);
-            }
-            else if (!(lhs is MBool) && !(lhs is MInt) && !(lhs is MNull))
-            {
-                return new MError($"{lhs.GetType()} is not comparable");
-            }
-            else if (!(rhs is MBool) && !(rhs is MBool) && !(rhs is MNull))
-            {
-                return new MError($"{rhs.GetType()} is not comparable");
-            }
-            else
-            {
-                return new MBool(false);
+                case (MInt lInt, MInt rInt):
+                    return new MBool(lInt.Value != rInt.Value);
+                case (MBool lBool, MBool rBool):
+                    return new MBool(lBool.Value != rBool.Value);
+                case (MString lString, MString rString):
+                    return new MBool(lString.Value != rString.Value);
+                case (MNull, MNull):
+                    return new MBool(false);
+                default:
+                    return new MBool(true);
             }
         }
 
@@ -582,13 +619,21 @@ namespace Interpreter
         {
             MonkeyObject lhs = Eval(op.Lhs, env);
             MonkeyObject rhs = Eval(op.Rhs, env);
-            if (lhs is MInt lInt && rhs is MInt rInt)
+
+            switch (lhs, rhs)
             {
-                return new MBool(lInt.Value < rInt.Value);
-            }
-            else
-            {
-                return new MNull();
+                case (MInt lInt, MInt rInt):
+                    return new MBool(lInt.Value < rInt.Value);
+                case (MString lString, MString rString):
+                    switch (lString.Value.CompareTo(rString.Value))
+                    {
+                        case int ord when ord < 0:
+                            return new MBool(true);
+                        default:
+                            return new MBool(false);
+                    }
+                default:
+                    return new MNull();
             }
         }
 
@@ -596,13 +641,21 @@ namespace Interpreter
         {
             MonkeyObject lhs = Eval(op.Lhs, env);
             MonkeyObject rhs = Eval(op.Rhs, env);
-            if (lhs is MInt lInt && rhs is MInt rInt)
+
+            switch (lhs, rhs)
             {
-                return new MBool(lInt.Value > rInt.Value);
-            }
-            else
-            {
-                return new MNull();
+                case (MInt lInt, MInt rInt):
+                    return new MBool(lInt.Value > rInt.Value);
+                case (MString lString, MString rString):
+                    switch (lString.Value.CompareTo(rString.Value))
+                    {
+                        case int ord when ord > 0:
+                            return new MBool(true);
+                        default:
+                            return new MBool(false);
+                    }
+                default:
+                    return new MNull();
             }
         }
 

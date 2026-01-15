@@ -117,6 +117,28 @@ namespace Interpreter
         }
     }
 
+    public class StringLiteral : Expression
+    {
+        public Token Tok;
+        public string Value;
+
+        public StringLiteral(Token tok, string value)
+        {
+            Tok = tok;
+            Value = value;
+        }
+
+        public string TokenLiteral()
+        {
+            return Tok.Literal;
+        }
+
+        public override string ToString()
+        {
+            return $"(string (\"{Value}\"))";
+        }
+    }
+
     public class FunctionLiteral : Expression
     {
         public Token Tok;
@@ -424,6 +446,7 @@ namespace Interpreter
             {TokenType.Greater, Precedences.LESSGREATER},
             {TokenType.Plus, Precedences.SUM},
             {TokenType.Minus, Precedences.SUM},
+            {TokenType.Caret, Precedences.SUM},
             {TokenType.Asterisk, Precedences.PRODUCT},
             {TokenType.Slash, Precedences.PRODUCT},
             {TokenType.LParen, Precedences.CALL}
@@ -446,9 +469,10 @@ namespace Interpreter
             PrefixTable = new Dictionary<TokenType, Func<Expression?>>();
             PrefixTable.Add(TokenType.Identifier, ParseIdent);
             PrefixTable.Add(TokenType.Int, ParseInt);
-            PrefixTable.Add(TokenType.Function, ParseFunction);
             PrefixTable.Add(TokenType.True, ParseBoolean);
             PrefixTable.Add(TokenType.False, ParseBoolean);
+            PrefixTable.Add(TokenType.String, ParseString);
+            PrefixTable.Add(TokenType.Function, ParseFunction);
             PrefixTable.Add(TokenType.Exclam, ParsePrefixOp);
             PrefixTable.Add(TokenType.Minus, ParsePrefixOp);
             PrefixTable.Add(TokenType.LParen, ParseGrouped);
@@ -458,6 +482,7 @@ namespace Interpreter
             InfixTable.Add(TokenType.Plus, ParseInfixOp);
             InfixTable.Add(TokenType.Asterisk, ParseInfixOp);
             InfixTable.Add(TokenType.Slash, ParseInfixOp);
+            InfixTable.Add(TokenType.Caret, ParseInfixOp);
             InfixTable.Add(TokenType.Equal, ParseInfixOp);
             InfixTable.Add(TokenType.NotEqual, ParseInfixOp);
             InfixTable.Add(TokenType.Less, ParseInfixOp);
@@ -624,6 +649,14 @@ namespace Interpreter
         private BooleanLiteral ParseBoolean()
         {
             BooleanLiteral result = new BooleanLiteral(CurrentToken, bool.Parse(CurrentToken.Literal));
+            NextToken();
+            return result;
+        }
+
+        private StringLiteral ParseString()
+        {
+            string value = CurrentToken.Literal.Substring(1, CurrentToken.Literal.Count() - 2);
+            StringLiteral result = new StringLiteral(CurrentToken, value);
             NextToken();
             return result;
         }
