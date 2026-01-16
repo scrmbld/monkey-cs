@@ -171,6 +171,47 @@ namespace Interpreter
         }
     }
 
+    public class HashLiteral : Expression
+    {
+        public Token Tok;
+        public Dictionary<Expression, Expression> Value;
+
+        public HashLiteral(Token tok, Dictionary<Expression, Expression> value)
+        {
+            Tok = tok;
+            Value = value;
+        }
+
+        public string TokenLiteral()
+        {
+            return Tok.Literal;
+        }
+
+        public override string ToString()
+        {
+            StringBuilder sb = new StringBuilder("(hash");
+            foreach (KeyValuePair<Expression, Expression> pair in Value)
+            {
+                StringBuilder pairSb = new StringBuilder("\n  (pair\n    ");
+
+                StringBuilder keySb = new StringBuilder(pair.Key.ToString());
+                keySb.Replace("\n", "\n    ");
+                pairSb.Append(keySb);
+                pairSb.Append("\n    ");
+
+                StringBuilder valueSb = new StringBuilder(pair.Value.ToString());
+                valueSb.Replace("\n", "\n    ");
+                pairSb.Append(valueSb);
+                pairSb.Append(")");
+
+                sb.Append(pairSb);
+            }
+
+            return sb.ToString();
+        }
+
+    }
+
     public class IndexExpression : Expression
     {
         public Token Tok;
@@ -542,6 +583,7 @@ namespace Interpreter
             PrefixTable.Add(TokenType.False, ParseBoolean);
             PrefixTable.Add(TokenType.String, ParseString);
             PrefixTable.Add(TokenType.LBracket, ParseArray);
+            PrefixTable.Add(TokenType.LBrace, ParseHash);
             PrefixTable.Add(TokenType.Function, ParseFunction);
             PrefixTable.Add(TokenType.Exclam, ParsePrefixOp);
             PrefixTable.Add(TokenType.Minus, ParsePrefixOp);
@@ -773,6 +815,71 @@ namespace Interpreter
 
             return new ArrayLiteral(arrayToken, value);
         }
+
+        private HashLiteral? ParseHash()
+        {
+            Token hashToken = CurrentToken;
+
+            Dictionary<Expression, Expression> value = new Dictionary<Expression, Expression>();
+            NextToken();
+
+            while (CurrentToken.Type != TokenType.RBrace)
+            {
+                Expression? nextKey = ParseExpression(Precedences.LOWEST);
+                if (nextKey == null)
+                {
+                    ExpressionError();
+                    return null;
+                }
+
+                if (CurrentToken.Type != TokenType.Colon)
+                {
+                    CurrentError(TokenType.Colon);
+                    return null;
+                }
+                NextToken();
+
+                Expression? nextValue = ParseExpression(Precedences.LOWEST);
+                if (nextValue == null)
+                {
+                    ExpressionError();
+                    return null;
+                }
+
+                try
+                {
+                    value.Add(nextKey, nextValue);
+                }
+                catch (ArgumentException)
+                {
+                    ErrorsList.Add("Duplicate key in hash literal");
+                    return null;
+                }
+
+                if (CurrentToken.Type == TokenType.RBrace)
+                {
+                    break;
+                }
+
+                if (CurrentToken.Type != TokenType.Comma)
+                {
+                    CurrentError(TokenType.Comma);
+                    return null;
+                }
+
+                NextToken();
+            }
+
+            if (CurrentToken.Type != TokenType.RBrace)
+            {
+                CurrentError(TokenType.RBrace);
+                return null;
+            }
+            NextToken();
+
+            return new HashLiteral(hashToken, value);
+        }
+
 
         private Identifier ParseIdent()
         {

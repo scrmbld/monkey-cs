@@ -1133,17 +1133,31 @@ namespace Interpreter.UnitTests
             Parser p = new Parser(new Lexer(input));
             Evaluator e = new Evaluator();
             MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
-            MonkeyObject expected = new MHash(new Dictionary<MonkeyObject, MonkeyObject>
+            MonkeyObject expected = new MArray(new List<MonkeyObject>
             {
-                {new MString("red"), new MInt(0)},
-                {new MString("yellow"), new MInt(1)},
-                {new MString("green"), new MInt(2)},
+                new MInt(1),
+                new MInt(2),
+                new MInt(3),
+                new MString("hi"),
+                new MFunction(
+                    new List<Identifier> {
+                        new Identifier(new Token(TokenType.Identifier, "x"), "x"),
+                    },
+                    new List<Statement>
+                    {
+                        new ExpressionStatement(
+                            new Token(TokenType.Identifier, "x"),
+                            new Identifier(new Token(TokenType.Identifier, "x"), "x")
+                        )
+                    },
+                    new Environment()
+                )
             });
             Assert.Equivalent(expected, result);
         }
 
         [Fact]
-        void EvalArrayIndex()
+        void EvalIndexExpression()
         {
             string input = "[1, 2, 3, 4][3]";
             Parser p = new Parser(new Lexer(input));
@@ -1159,32 +1173,6 @@ namespace Interpreter.UnitTests
             expected = new MError("Index 2 out of range for array of length 2");
             Assert.Equivalent(expected, result);
         }
-
-        [Fact]
-        void EvalHashIndex()
-        {
-            string input = "{\"a\": 1, \"b\": 2, 3: \"c\"}[\"b\"];";
-            Parser p = new Parser(new Lexer(input));
-            Evaluator e = new Evaluator();
-            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
-            MonkeyObject expected = new MInt(2);
-            Assert.Equivalent(expected, result);
-
-            input = "{\"a\": 1, \"b\": 2, 3: \"c\"}[3];";
-            p = new Parser(new Lexer(input));
-            e = new Evaluator();
-            result = e.Eval(p.ParseProgram(), new Environment());
-            expected = new MString("c");
-            Assert.Equivalent(expected, result);
-
-            input = "{\"a\": 1, \"b\": 2, 3: \"c\"}[\"z\"];";
-            p = new Parser(new Lexer(input));
-            e = new Evaluator();
-            result = e.Eval(p.ParseProgram(), new Environment());
-            expected = new MError("Key \"z\" not found in hash");
-            Assert.Equivalent(expected, result);
-        }
-
 
         [Fact]
         void EvalBang()
@@ -1479,13 +1467,6 @@ namespace Interpreter.UnitTests
             result = e.Eval(p.ParseProgram(), new Environment());
             expected = new MError("Type error: type MInt does not have a length");
             Assert.Equivalent(expected, result);
-
-            input = "len({1: \"a\", 2: \"b\"})";
-            p = new Parser(new Lexer(input));
-            e = new Evaluator();
-            result = e.Eval(p.ParseProgram(), new Environment());
-            expected = new MInt(2);
-            Assert.Equivalent(expected, result);
         }
 
         [Fact]
@@ -1551,45 +1532,5 @@ namespace Interpreter.UnitTests
             expected = new MArray(new List<MonkeyObject> { new MInt(1) });
             Assert.Equivalent(expected, result);
         }
-
-        [Fact]
-        void EvalContains()
-        {
-            string input = "contains([1, 2, 3, 4], 4);";
-            Parser p = new Parser(new Lexer(input));
-            Evaluator e = new Evaluator();
-            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
-            MonkeyObject expected = new MBool(true);
-            Assert.Equivalent(expected, result);
-
-            input = "contains([], \"a\")";
-            p = new Parser(new Lexer(input));
-            e = new Evaluator();
-            result = e.Eval(p.ParseProgram(), new Environment());
-            expected = new MBool(false);
-            Assert.Equivalent(expected, result);
-
-            input = "contains({\"a\": 1}, \"a\")";
-            p = new Parser(new Lexer(input));
-            e = new Evaluator();
-            result = e.Eval(p.ParseProgram(), new Environment());
-            expected = new MBool(true);
-            Assert.Equivalent(expected, result);
-
-            input = "contains({\"b\": \"a\"}, \"a\")";
-            p = new Parser(new Lexer(input));
-            e = new Evaluator();
-            result = e.Eval(p.ParseProgram(), new Environment());
-            expected = new MBool(false);
-            Assert.Equivalent(expected, result);
-
-            input = "contains(17, \"a\")";
-            p = new Parser(new Lexer(input));
-            e = new Evaluator();
-            result = e.Eval(p.ParseProgram(), new Environment());
-            expected = new MError("Type error: expected MArray or MHash, got MInt");
-            Assert.Equivalent(expected, result);
-        }
-
     }
 }

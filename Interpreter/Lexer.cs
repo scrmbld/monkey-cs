@@ -26,6 +26,7 @@
         // delimiters
         Comma,
         Semicolon,
+        Colon,
         LParen,
         RParen,
         LBrace,
@@ -178,6 +179,7 @@
                 '/' => new Token(TokenType.Slash, Ch.ToString()),
                 '^' => new Token(TokenType.Caret, Ch.ToString()),
                 ';' => new Token(TokenType.Semicolon, Ch.ToString()),
+                ':' => new Token(TokenType.Colon, Ch.ToString()),
                 '(' => new Token(TokenType.LParen, Ch.ToString()),
                 ')' => new Token(TokenType.RParen, Ch.ToString()),
                 '{' => new Token(TokenType.LBrace, Ch.ToString()),

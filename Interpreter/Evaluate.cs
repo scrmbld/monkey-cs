@@ -24,6 +24,10 @@ namespace Interpreter
                 {
                     return new MInt(a.Value.Count());
                 }
+                else if (args[0] is MHash h)
+                {
+                    return new MInt(h.Value.Count());
+                }
                 else
                 {
                     return new MError($"Type error: type {args[0].ObjectType()} does not have a length");
@@ -87,6 +91,34 @@ namespace Interpreter
                 }
             };
             Store.Add("push", new MBuiltin(arrayPush, 2));
+
+            Func<List<MonkeyObject>, MonkeyObject> contains = args =>
+            {
+                if (args[0] is MArray arr)
+                {
+                    return new MBool(arr.Value.Contains(args[1]));
+                }
+                else if (args[0] is MHash hash)
+                {
+                    return new MBool(hash.Value.ContainsKey(args[1]));
+                }
+                else
+                {
+                    return new MError($"Type error: expected MArray or MHash, got {args[0].ObjectType()}");
+                }
+            };
+            Store.Add("contains", new MBuiltin(contains, 2));
+
+            Func<List<MonkeyObject>, MonkeyObject> puts = args =>
+            {
+                foreach (MonkeyObject obj in args)
+                {
+                    Console.WriteLine(obj);
+                }
+
+                return new MNull();
+            };
+            Store.Add("puts", new MBuiltin(puts, 1));
         }
 
         public Environment(Dictionary<string, MonkeyObject> store)
@@ -132,6 +164,7 @@ namespace Interpreter
         MBool,
         MString,
         MArray,
+        MHash,
         MFunction,
         MNull,
         // wrap return values so we can implement return control flow
@@ -196,6 +229,19 @@ namespace Interpreter
         {
             return Inspect();
         }
+
+        public static bool operator ==(MInt a, MInt b) => a?.Value == b?.Value;
+        public static bool operator !=(MInt a, MInt b) => !(a?.Value == b?.Value);
+
+        public override bool Equals(object? obj)
+        {
+            return obj is MInt other && other.Value == Value;
+        }
+
+        public override int GetHashCode()
+        {
+            return 463278 + Value.GetHashCode();
+        }
     }
 
     public class MBool : MonkeyObject
@@ -221,6 +267,19 @@ namespace Interpreter
         {
             return Inspect();
         }
+
+        public static bool operator ==(MBool a, MBool b) => a?.Value == b?.Value;
+        public static bool operator !=(MBool a, MBool b) => !(a?.Value == b?.Value);
+
+        public override bool Equals(object? obj)
+        {
+            return obj is MBool other && other.Value == Value;
+        }
+
+        public override int GetHashCode()
+        {
+            return 454354 + Value.GetHashCode();
+        }
     }
 
     public class MString : MonkeyObject
@@ -245,6 +304,19 @@ namespace Interpreter
         public override string ToString()
         {
             return Inspect();
+        }
+
+        public static bool operator ==(MString a, MString b) => a?.Value == b?.Value;
+        public static bool operator !=(MString a, MString b) => !(a?.Value == b?.Value);
+
+        public override bool Equals(object? obj)
+        {
+            return obj is MString other && other.Value == Value;
+        }
+
+        public override int GetHashCode()
+        {
+            return 865431 + Value.GetHashCode();
         }
     }
 
@@ -279,6 +351,68 @@ namespace Interpreter
         public override string ToString()
         {
             return Inspect();
+        }
+
+        public static bool operator ==(MArray a, MArray b) => a?.Value == b?.Value;
+        public static bool operator !=(MArray a, MArray b) => !(a?.Value == b?.Value);
+
+        public override bool Equals(object? obj)
+        {
+            return obj is MArray other && other.Value == Value;
+        }
+
+        public override int GetHashCode()
+        {
+            return 956279 + Value.GetHashCode();
+        }
+    }
+
+    public class MHash : MonkeyObject
+    {
+        public Dictionary<MonkeyObject, MonkeyObject> Value;
+
+        public MHash(Dictionary<MonkeyObject, MonkeyObject> value)
+        {
+            Value = value;
+        }
+
+        public MonkeyObjType ObjectType()
+        {
+            return MonkeyObjType.MHash;
+        }
+
+        public string Inspect()
+        {
+            StringBuilder sb = new StringBuilder("{");
+            foreach (KeyValuePair<MonkeyObject, MonkeyObject> pair in Value)
+            {
+                sb.Append(pair.Key);
+                sb.Append(": ");
+                sb.Append(pair.Value);
+                sb.Append(", ");
+            }
+
+            sb.Append("}");
+
+            return sb.ToString();
+        }
+
+        public override string ToString()
+        {
+            return Inspect();
+        }
+
+        public static bool operator ==(MHash a, MHash b) => a?.Value == b?.Value;
+        public static bool operator !=(MHash a, MHash b) => !(a?.Value == b?.Value);
+
+        public override bool Equals(object? obj)
+        {
+            return obj is MHash other && other.Value == Value;
+        }
+
+        public override int GetHashCode()
+        {
+            return 565483 + Value.GetHashCode();
         }
     }
 
@@ -334,6 +468,7 @@ namespace Interpreter
         {
             return Inspect();
         }
+
     }
 
     public class MError : MonkeyObject
@@ -451,6 +586,8 @@ namespace Interpreter
                     return EvalStringLiteral(s);
                 case ArrayLiteral a:
                     return EvalArrayLiteral(a, env);
+                case HashLiteral h:
+                    return EvalHashLiteral(h, env);
                 case IndexExpression e:
                     return EvalIndexExpression(e, env);
                 case FunctionLiteral f:
@@ -575,6 +712,30 @@ namespace Interpreter
             }
 
             return new MArray(value);
+        }
+
+        private MonkeyObject EvalHashLiteral(HashLiteral h, Environment env)
+        {
+            Dictionary<MonkeyObject, MonkeyObject> value = new Dictionary<MonkeyObject, MonkeyObject>();
+
+            foreach (KeyValuePair<Expression, Expression> pair in h.Value)
+            {
+                MonkeyObject nextKey = Eval(pair.Key, env);
+                if (nextKey is MError)
+                {
+                    return nextKey;
+                }
+
+                MonkeyObject nextValue = Eval(pair.Value, env);
+                if (nextValue is MError)
+                {
+                    return nextValue;
+                }
+
+                value.Add(nextKey, nextValue);
+            }
+
+            return new MHash(value);
         }
 
         private MonkeyObject EvalFunctionLiteral(FunctionLiteral f, Environment env)
@@ -937,24 +1098,87 @@ namespace Interpreter
                 return indexValue;
             }
 
-            if (indexValue is MInt idx && arrayValue is MArray arr)
+            return arrayValue switch
+            {
+                MArray array => EvalArrayIndex(array, indexValue, env),
+                MHash hash => EvalHashIndex(hash, indexValue, env),
+                _ => new MError($"Cannot index into value of type {arrayValue.ObjectType()}")
+            };
+        }
+
+        private MonkeyObject EvalArrayIndex(MArray array, MonkeyObject indexValue, Environment env)
+        {
+            if (indexValue is MInt idx)
             {
                 try
                 {
-                    return arr.Value[idx.Value];
+                    return array.Value[idx.Value];
                 }
                 catch (ArgumentOutOfRangeException)
                 {
-                    return new MError($"Index {idx.Value} out of range for array of length {arr.Value.Count()}");
+                    return new MError($"Index {idx.Value} out of range for array of length {array.Value.Count()}");
                 }
-            }
-            else if (!(arrayValue is MArray))
-            {
-                return TypeError(MonkeyObjType.MArray, arrayValue);
             }
             else
             {
                 return TypeError(MonkeyObjType.MInt, indexValue);
+            }
+        }
+
+        private MonkeyObject EvalHashIndex(MHash hash, MonkeyObject indexValue, Environment env)
+        {
+            Dictionary<MonkeyObject, string> test = new Dictionary<MonkeyObject, string>();
+            test.Add(new MInt(3), ":3");
+            // I have made a severe mistake. Refactoring this would be hard so I just won't make it better
+            switch (indexValue)
+            {
+                case MInt i:
+                    try
+                    {
+                        return hash.Value[i];
+                    }
+                    catch (KeyNotFoundException)
+                    {
+                        return new MError($"Key {indexValue} not found in hash");
+                    }
+                case MString s:
+                    try
+                    {
+                        return hash.Value[s];
+                    }
+                    catch (KeyNotFoundException)
+                    {
+                        return new MError($"Key {indexValue} not found in hash");
+                    }
+                case MBool b:
+                    try
+                    {
+                        return hash.Value[b];
+                    }
+                    catch (KeyNotFoundException)
+                    {
+                        return new MError($"Key {indexValue} not found in hash");
+                    }
+                case MArray a:
+                    try
+                    {
+                        return hash.Value[a];
+                    }
+                    catch (KeyNotFoundException)
+                    {
+                        return new MError($"Key {indexValue} not found in hash");
+                    }
+                case MHash h:
+                    try
+                    {
+                        return hash.Value[h];
+                    }
+                    catch (KeyNotFoundException)
+                    {
+                        return new MError($"Key {indexValue} not found in hash");
+                    }
+                default:
+                    return new MError($"{indexValue.ObjectType()} is not hashable");
             }
         }
 
