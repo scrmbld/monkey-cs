@@ -130,6 +130,22 @@ namespace Interpreter.UnitTests
         }
 
         [Fact]
+        public void LexerLBracket()
+        {
+            Lexer l = new Lexer("[");
+            Token result = l.NextToken();
+            Assert.Equivalent(new Token(TokenType.LBracket, "["), result);
+        }
+
+        [Fact]
+        public void LexerRBracket()
+        {
+            Lexer l = new Lexer("]");
+            Token result = l.NextToken();
+            Assert.Equivalent(new Token(TokenType.RBracket, "]"), result);
+        }
+
+        [Fact]
         public void LexerComma()
         {
             Lexer l = new Lexer(",");
@@ -301,6 +317,34 @@ namespace Interpreter.UnitTests
 
             Assert.Equivalent(result, expected);
         }
+
+        [Fact]
+        void LexerArray()
+        {
+            string program = "[1, 2, x, \"squirrel\"]";
+            List<Token> expected = new List<Token>
+            {
+                new Token(TokenType.LBracket, "["),
+                new Token(TokenType.Int, "1"),
+                new Token(TokenType.Comma, ","),
+                new Token(TokenType.Int, "2"),
+                new Token(TokenType.Comma, ","),
+                new Token(TokenType.Identifier, "x"),
+                new Token(TokenType.Comma, ","),
+                new Token(TokenType.String, "\"squirrel\""),
+                new Token(TokenType.RBracket, "]"),
+            };
+
+            Lexer l = new Lexer(program);
+            List<Token> result = new List<Token>();
+
+            for (Token t = l.NextToken(); t.Type != TokenType.Eof; t = l.NextToken())
+            {
+                result.Append(t);
+            }
+
+            Assert.Equivalent(result, expected);
+        }
     }
 
     public class ParserStatementTests
@@ -441,6 +485,78 @@ namespace Interpreter.UnitTests
 
             Assert.Empty(p.Errors());
             Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void ParseArray()
+        {
+            string input = "[1, 2, x, \"hello\"]";
+            Parser p = new Parser(new Lexer(input));
+            Program result = p.ParseProgram();
+            Program expected = new Program();
+            expected.Statements = new List<Statement> {
+                new ExpressionStatement(
+                    new Token(TokenType.LBracket, "["),
+                    new ArrayLiteral(
+                        new Token(TokenType.LBracket, "["),
+                        new List<Expression> {
+                            new IntLiteral(new Token(TokenType.Int, "1"), 1),
+                            new IntLiteral(new Token(TokenType.Int, "2"), 2),
+                            new Identifier(new Token(TokenType.Identifier, "x"), "x"),
+                            new StringLiteral(new Token(TokenType.String, "\"hello\""), "hello")
+                        }
+                    )
+                )
+            };
+
+            Assert.Equivalent(expected, result);
+            Assert.Empty(p.Errors());
+        }
+
+        [Fact]
+        void ParseAccess()
+        {
+            string input = "arr[1]";
+            Parser p = new Parser(new Lexer(input));
+            Program result = p.ParseProgram();
+            Program expected = new Program();
+            expected.Statements = new List<Statement> {
+                new ExpressionStatement(
+                    new Token(TokenType.Identifier, "arr"),
+                    new IndexExpression(
+                        new Token(TokenType.LBracket, "["),
+                        new Identifier(new Token(TokenType.Identifier, "arr"), "arr"),
+                        new IntLiteral(new Token(TokenType.Int, "1"), 1)
+                    )
+                )
+            };
+
+            Assert.Equivalent(expected, result);
+            Assert.Empty(p.Errors());
+
+            input = "[1, 5][1]";
+            p = new Parser(new Lexer(input));
+            result = p.ParseProgram();
+            expected = new Program();
+            expected.Statements = new List<Statement> {
+                new ExpressionStatement(
+                    new Token(TokenType.LBracket, "["),
+                    new IndexExpression(
+                        new Token(TokenType.LBracket, "["),
+                        new ArrayLiteral(
+                            new Token(TokenType.LBracket, "["),
+                            new List<Expression> {
+                                new IntLiteral(new Token(TokenType.Int, "1"), 1),
+                                new IntLiteral(new Token(TokenType.Int, "5"), 5)
+                            }
+                        ),
+                        new IntLiteral(new Token(TokenType.Int, "1"), 1)
+                    )
+                )
+            };
+
+            Assert.Equivalent(expected, result);
+            Assert.Empty(p.Errors());
         }
 
         [Fact]
@@ -951,6 +1067,54 @@ namespace Interpreter.UnitTests
         }
 
         [Fact]
+        void EvalArray()
+        {
+            string input = "let x = \"hi\"; [1, 2, 3, x, fn (x) { x }]";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MArray(new List<MonkeyObject>
+            {
+                new MInt(1),
+                new MInt(2),
+                new MInt(3),
+                new MString("hi"),
+                new MFunction(
+                    new List<Identifier> {
+                        new Identifier(new Token(TokenType.Identifier, "x"), "x"),
+                    },
+                    new List<Statement>
+                    {
+                        new ExpressionStatement(
+                            new Token(TokenType.Identifier, "x"),
+                            new Identifier(new Token(TokenType.Identifier, "x"), "x")
+                        )
+                    },
+                    new Environment()
+                )
+            });
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void EvalIndexExpression()
+        {
+            string input = "[1, 2, 3, 4][3]";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MInt(4);
+            Assert.Equivalent(expected, result);
+
+            input = "[1, 4][2]";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MError("Index 2 out of range for array of length 2");
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
         void EvalBang()
         {
             string input = "!false";
@@ -1230,11 +1394,82 @@ namespace Interpreter.UnitTests
             MonkeyObject expected = new MInt(6);
             Assert.Equivalent(expected, result);
 
+            input = "len([1, 2, 3, 3])";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MInt(4);
+            Assert.Equivalent(expected, result);
+
             input = "len(17)";
             p = new Parser(new Lexer(input));
             e = new Evaluator();
             result = e.Eval(p.ParseProgram(), new Environment());
-            expected = new MError("Type error: expected MString, got Interpreter.MInt");
+            expected = new MError("Type error: type MInt does not have a length");
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void EvalHead()
+        {
+            string input = "head([1, 2, 3, 4]);";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MInt(1);
+            Assert.Equivalent(expected, result);
+
+            input = "head([]);";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MError("Unable to get head of empty array");
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void EvalTail()
+        {
+            string input = "tail([1, 2, 3, 4]);";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MArray(new List<MonkeyObject> {
+                new MInt(2),
+                new MInt(3),
+                new MInt(4)
+            });
+            Assert.Equivalent(expected, result);
+
+            input = "tail([]);";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MArray(new List<MonkeyObject>());
+            Assert.Equivalent(expected, result);
+        }
+
+        [Fact]
+        void EvalPush()
+        {
+            string input = "push([1, 2, 3, 4], 5);";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MArray(new List<MonkeyObject> {
+                new MInt(1),
+                new MInt(2),
+                new MInt(3),
+                new MInt(4),
+                new MInt(5)
+            });
+            Assert.Equivalent(expected, result);
+
+            input = "push([], 1);";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MArray(new List<MonkeyObject> { new MInt(1) });
             Assert.Equivalent(expected, result);
         }
     }

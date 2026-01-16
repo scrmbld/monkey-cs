@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Interpreter
 {
     public class Environment
@@ -18,12 +20,73 @@ namespace Interpreter
                 {
                     return new MInt(s.Value.Count());
                 }
+                else if (args[0] is MArray a)
+                {
+                    return new MInt(a.Value.Count());
+                }
                 else
                 {
-                    return new MError($"Type error: expected MString, got {args[0].ObjectType()}");
+                    return new MError($"Type error: type {args[0].ObjectType()} does not have a length");
                 }
             };
-            Store.Add("len", new MBuiltin(len, new List<MonkeyObjType> { MonkeyObjType.MString }, 1));
+            Store.Add("len", new MBuiltin(len, 1));
+
+            Func<List<MonkeyObject>, MonkeyObject> arrayHead = args =>
+            {
+                if (args[0] is MArray arr)
+                {
+                    try
+                    {
+                        return arr.Value[0];
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        return new MError("Unable to get head of empty array");
+                    }
+                }
+                else
+                {
+                    return new MError($"Type error: expected MArray, got {args[0].ObjectType()}");
+                }
+            };
+            Store.Add("head", new MBuiltin(arrayHead, 1));
+
+            Func<List<MonkeyObject>, MonkeyObject> arrayTail = args =>
+            {
+                if (args[0] is MArray arr)
+                {
+                    try
+                    {
+                        return new MArray(arr.Value.GetRange(1, arr.Value.Count() - 1));
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        // tail of [] is []
+                        return new MArray(new List<MonkeyObject>());
+                    }
+                }
+                else
+                {
+                    return new MError($"Type error: expected MArray, got {args[0].ObjectType()}");
+                }
+            };
+            Store.Add("tail", new MBuiltin(arrayTail, 1));
+
+            Func<List<MonkeyObject>, MonkeyObject> arrayPush = args =>
+            {
+                if (args[0] is MArray arr)
+                {
+                    // shallow copy the array
+                    MArray result = new MArray(new List<MonkeyObject>(arr.Value));
+                    result.Value.Add(args[1]);
+                    return result;
+                }
+                else
+                {
+                    return new MError($"Type error: expected MArray, got {args[0].ObjectType()}");
+                }
+            };
+            Store.Add("push", new MBuiltin(arrayPush, 2));
         }
 
         public Environment(Dictionary<string, MonkeyObject> store)
@@ -68,6 +131,7 @@ namespace Interpreter
         MInt,
         MBool,
         MString,
+        MArray,
         MFunction,
         MNull,
         // wrap return values so we can implement return control flow
@@ -184,6 +248,40 @@ namespace Interpreter
         }
     }
 
+    public class MArray : MonkeyObject
+    {
+        public List<MonkeyObject> Value;
+
+        public MArray(List<MonkeyObject> value)
+        {
+            Value = value;
+        }
+
+        public MonkeyObjType ObjectType()
+        {
+            return MonkeyObjType.MFunction;
+        }
+
+        public string Inspect()
+        {
+            StringBuilder sb = new StringBuilder("[");
+            foreach (MonkeyObject m in Value)
+            {
+                sb.Append(m);
+                sb.Append(", ");
+            }
+
+            sb.Append("]");
+
+            return sb.ToString();
+        }
+
+        public override string ToString()
+        {
+            return Inspect();
+        }
+    }
+
     public class MNull : MonkeyObject
     {
         public MonkeyObjType ObjectType()
@@ -212,6 +310,13 @@ namespace Interpreter
         {
             Args = f.Args;
             Body = f.Body;
+            Env = env.ShallowCopy();
+        }
+
+        public MFunction(List<Identifier> args, List<Statement> body, Environment env)
+        {
+            Args = args;
+            Body = body;
             Env = env.ShallowCopy();
         }
 
@@ -284,19 +389,12 @@ namespace Interpreter
     public class MBuiltin : MonkeyObject
     {
         public Func<List<MonkeyObject>, MonkeyObject> F;
-        public List<MonkeyObjType> ArgTypes;
         public int ArgCount;
 
-        public MBuiltin(Func<List<MonkeyObject>, MonkeyObject> f, List<MonkeyObjType> argTypes, int argCount)
+        public MBuiltin(Func<List<MonkeyObject>, MonkeyObject> f, int argCount)
         {
             F = f;
-            ArgTypes = argTypes;
             ArgCount = argCount;
-
-            if (ArgTypes.Count != ArgCount)
-            {
-                throw new ArgumentException($"ArgTypes length ({ArgTypes.Count}) does not match the given ArgCount ({ArgCount})");
-            }
         }
 
         public MonkeyObject Execute(List<MonkeyObject> args)
@@ -306,14 +404,6 @@ namespace Interpreter
             if (args.Count != ArgCount)
             {
                 throw new ArgumentException($"args length ({args.Count}) does not match the function's ArgCount ({ArgCount})");
-            }
-
-            for (int i = 0; i < args.Count; i++)
-            {
-                if (args[i].ObjectType() != ArgTypes[i])
-                {
-                    return new MError($"Type error: expected {ArgTypes[i]}, got {args[i].GetType()}");
-                }
             }
 
             // run the function
@@ -359,6 +449,10 @@ namespace Interpreter
                     return EvalBooleanLiteral(b);
                 case StringLiteral s:
                     return EvalStringLiteral(s);
+                case ArrayLiteral a:
+                    return EvalArrayLiteral(a, env);
+                case IndexExpression e:
+                    return EvalIndexExpression(e, env);
                 case FunctionLiteral f:
                     return EvalFunctionLiteral(f, env);
                 case PrefixOperator op:
@@ -464,6 +558,23 @@ namespace Interpreter
         private MonkeyObject EvalStringLiteral(StringLiteral s)
         {
             return new MString(s.Value);
+        }
+
+        private MonkeyObject EvalArrayLiteral(ArrayLiteral a, Environment env)
+        {
+            List<MonkeyObject> value = new List<MonkeyObject>();
+
+            foreach (Expression exp in a.Value)
+            {
+                MonkeyObject nextVal = Eval(exp, env);
+                if (nextVal is MError)
+                {
+                    return nextVal;
+                }
+                value.Add(nextVal);
+            }
+
+            return new MArray(value);
         }
 
         private MonkeyObject EvalFunctionLiteral(FunctionLiteral f, Environment env)
@@ -809,6 +920,41 @@ namespace Interpreter
             else
             {
                 return TypeError(MonkeyObjType.MFunction, fResult);
+            }
+        }
+
+        private MonkeyObject EvalIndexExpression(IndexExpression indexExp, Environment env)
+        {
+            MonkeyObject arrayValue = Eval(indexExp.Lhs, env);
+            if (arrayValue is MError)
+            {
+                return arrayValue;
+            }
+
+            MonkeyObject indexValue = Eval(indexExp.Index, env);
+            if (indexValue is MError)
+            {
+                return indexValue;
+            }
+
+            if (indexValue is MInt idx && arrayValue is MArray arr)
+            {
+                try
+                {
+                    return arr.Value[idx.Value];
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    return new MError($"Index {idx.Value} out of range for array of length {arr.Value.Count()}");
+                }
+            }
+            else if (!(arrayValue is MArray))
+            {
+                return TypeError(MonkeyObjType.MArray, arrayValue);
+            }
+            else
+            {
+                return TypeError(MonkeyObjType.MInt, indexValue);
             }
         }
 

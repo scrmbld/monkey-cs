@@ -30,6 +30,8 @@
         RParen,
         LBrace,
         RBrace,
+        LBracket,
+        RBracket,
 
         // keywords
         Function,
@@ -180,6 +182,8 @@
                 ')' => new Token(TokenType.RParen, Ch.ToString()),
                 '{' => new Token(TokenType.LBrace, Ch.ToString()),
                 '}' => new Token(TokenType.RBrace, Ch.ToString()),
+                '[' => new Token(TokenType.LBracket, Ch.ToString()),
+                ']' => new Token(TokenType.RBracket, Ch.ToString()),
                 ',' => new Token(TokenType.Comma, Ch.ToString()),
                 '\0' => new Token(TokenType.Eof, ""),
                 _ => null,

@@ -16,6 +16,7 @@ namespace Interpreter
         public static int PRODUCT = 4;
         public static int PREFIX = 5;
         public static int CALL = 6;
+        public static int INDEX = 7;
     }
 
     public interface Statement : Node { }
@@ -136,6 +137,73 @@ namespace Interpreter
         public override string ToString()
         {
             return $"(string (\"{Value}\"))";
+        }
+    }
+
+    public class ArrayLiteral : Expression
+    {
+        public Token Tok;
+        public List<Expression> Value;
+
+        public ArrayLiteral(Token tok, List<Expression> value)
+        {
+            Tok = tok;
+            Value = value;
+        }
+
+        public string TokenLiteral()
+        {
+            return Tok.Literal;
+        }
+
+        public override string ToString()
+        {
+            StringBuilder sb = new StringBuilder("(array");
+            foreach (Expression e in Value)
+            {
+                StringBuilder eSb = new StringBuilder("\n  ");
+                eSb.Append(e.ToString());
+                eSb.Replace("\n", "\n    ");
+                sb.Append(eSb);
+            }
+
+            return sb.ToString();
+        }
+    }
+
+    public class IndexExpression : Expression
+    {
+        public Token Tok;
+        public Expression Lhs;
+        public Expression Index;
+
+        public IndexExpression(Token tok, Expression lhs, Expression index)
+        {
+            Tok = tok;
+            Lhs = lhs;
+            Index = index;
+        }
+
+        public string TokenLiteral()
+        {
+            return Tok.Literal;
+        }
+
+        public override string ToString()
+        {
+            StringBuilder sb = new StringBuilder("(access\n  ");
+
+            StringBuilder lhsSb = new StringBuilder(Lhs.ToString());
+            lhsSb.Replace("\n", "\n    ");
+            sb.Append(lhsSb);
+            sb.Append("\n  ");
+
+            StringBuilder indexSb = new StringBuilder(Index.ToString());
+            indexSb.Replace("\n", "\n    ");
+            sb.Append(indexSb);
+            sb.Append(")");
+
+            return sb.ToString();
         }
     }
 
@@ -449,7 +517,8 @@ namespace Interpreter
             {TokenType.Caret, Precedences.SUM},
             {TokenType.Asterisk, Precedences.PRODUCT},
             {TokenType.Slash, Precedences.PRODUCT},
-            {TokenType.LParen, Precedences.CALL}
+            {TokenType.LParen, Precedences.CALL},
+            {TokenType.LBracket, Precedences.INDEX}
         };
 
         private Lexer Lex;
@@ -472,6 +541,7 @@ namespace Interpreter
             PrefixTable.Add(TokenType.True, ParseBoolean);
             PrefixTable.Add(TokenType.False, ParseBoolean);
             PrefixTable.Add(TokenType.String, ParseString);
+            PrefixTable.Add(TokenType.LBracket, ParseArray);
             PrefixTable.Add(TokenType.Function, ParseFunction);
             PrefixTable.Add(TokenType.Exclam, ParsePrefixOp);
             PrefixTable.Add(TokenType.Minus, ParsePrefixOp);
@@ -488,6 +558,7 @@ namespace Interpreter
             InfixTable.Add(TokenType.Less, ParseInfixOp);
             InfixTable.Add(TokenType.Greater, ParseInfixOp);
             InfixTable.Add(TokenType.LParen, ParseCall);
+            InfixTable.Add(TokenType.LBracket, ParseIndexExpression);
         }
 
         private void NextToken()
@@ -661,6 +732,48 @@ namespace Interpreter
             return result;
         }
 
+        private ArrayLiteral? ParseArray()
+        {
+            Token arrayToken = CurrentToken;
+
+            List<Expression> value = new List<Expression>();
+            NextToken();
+
+            while (CurrentToken.Type != TokenType.RBracket)
+            {
+                Expression? nextVal = ParseExpression(Precedences.LOWEST);
+                if (nextVal == null)
+                {
+                    ExpressionError();
+                    return null;
+                }
+
+                value.Add(nextVal);
+
+                if (CurrentToken.Type == TokenType.RBracket)
+                {
+                    break;
+                }
+
+                if (CurrentToken.Type != TokenType.Comma)
+                {
+                    CurrentError(TokenType.Comma);
+                    return null;
+                }
+
+                NextToken();
+            }
+
+            if (CurrentToken.Type != TokenType.RBracket)
+            {
+                CurrentError(TokenType.RBracket);
+                return null;
+            }
+            NextToken();
+
+            return new ArrayLiteral(arrayToken, value);
+        }
+
         private Identifier ParseIdent()
         {
             Identifier result = new Identifier(CurrentToken, CurrentToken.Literal);
@@ -753,8 +866,6 @@ namespace Interpreter
             List<Expression> args = new List<Expression>();
             NextToken();
 
-            // TODO: parse arguments that aren't identifiers
-
             while (CurrentToken.Type != TokenType.RParen)
             {
                 Expression? nextArg = ParseExpression(Precedences.LOWEST);
@@ -789,6 +900,28 @@ namespace Interpreter
 
             return new Call(callToken, lhs, args);
         }
+
+        private IndexExpression? ParseIndexExpression(Expression lhs)
+        {
+            Token tok = CurrentToken;
+            NextToken();
+
+            Expression? index = ParseExpression(Precedences.LOWEST);
+            if (index == null)
+            {
+                return null;
+            }
+
+            if (CurrentToken.Type != TokenType.RBracket)
+            {
+                CurrentError(TokenType.RBracket);
+                return null;
+            }
+            NextToken();
+
+            return new IndexExpression(tok, lhs, index);
+        }
+
 
         private PrefixOperator? ParsePrefixOp()
         {
