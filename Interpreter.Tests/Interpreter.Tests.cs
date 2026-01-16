@@ -1219,5 +1219,23 @@ namespace Interpreter.UnitTests
             expected = new MInt(4);
             Assert.Equivalent(expected, result);
         }
+
+        [Fact]
+        void EvalLen()
+        {
+            string input = "len(\"Hello!\")";
+            Parser p = new Parser(new Lexer(input));
+            Evaluator e = new Evaluator();
+            MonkeyObject result = e.Eval(p.ParseProgram(), new Environment());
+            MonkeyObject expected = new MInt(6);
+            Assert.Equivalent(expected, result);
+
+            input = "len(17)";
+            p = new Parser(new Lexer(input));
+            e = new Evaluator();
+            result = e.Eval(p.ParseProgram(), new Environment());
+            expected = new MError("Type error: expected MString, got Interpreter.MInt");
+            Assert.Equivalent(expected, result);
+        }
     }
 }

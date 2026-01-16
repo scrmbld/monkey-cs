@@ -3,10 +3,27 @@ namespace Interpreter
     public class Environment
     {
         private Dictionary<string, MonkeyObject> Store;
+        public static HashSet<string> BuiltinNames = new HashSet<string> {
+            "len"
+        };
 
         public Environment()
         {
             Store = new Dictionary<string, MonkeyObject>();
+
+            // builtins
+            Func<List<MonkeyObject>, MonkeyObject> len = args =>
+            {
+                if (args[0] is MString s)
+                {
+                    return new MInt(s.Value.Count());
+                }
+                else
+                {
+                    return new MError($"Type error: expected MString, got {args[0].ObjectType()}");
+                }
+            };
+            Store.Add("len", new MBuiltin(len, new List<MonkeyObjType> { MonkeyObjType.MString }, 1));
         }
 
         public Environment(Dictionary<string, MonkeyObject> store)
@@ -19,9 +36,20 @@ namespace Interpreter
             return Store[s];
         }
 
-        public void Set(string s, MonkeyObject val)
+        /// <summary>
+        /// Used to add or mutate values in the environment. Disallows collisions with builtins.
+        /// </summary>
+        /// <param name="s">variable name</param>
+        /// <param name="val">variable value</param>
+        /// <returns>true on success, false on fail</returns>
+        public bool Set(string s, MonkeyObject val)
         {
+            if (BuiltinNames.Contains(s))
+            {
+                return false;
+            }
             Store[s] = val;
+            return true;
         }
 
         public bool Valid(string s)
@@ -46,7 +74,8 @@ namespace Interpreter
         MReturn,
         // we use objects to pass errors around
         MError,
-        MIdentifier
+        MIdentifier,
+        MBuiltin
     };
 
     public interface MonkeyObject
@@ -252,6 +281,61 @@ namespace Interpreter
         }
     }
 
+    public class MBuiltin : MonkeyObject
+    {
+        public Func<List<MonkeyObject>, MonkeyObject> F;
+        public List<MonkeyObjType> ArgTypes;
+        public int ArgCount;
+
+        public MBuiltin(Func<List<MonkeyObject>, MonkeyObject> f, List<MonkeyObjType> argTypes, int argCount)
+        {
+            F = f;
+            ArgTypes = argTypes;
+            ArgCount = argCount;
+
+            if (ArgTypes.Count != ArgCount)
+            {
+                throw new ArgumentException($"ArgTypes length ({ArgTypes.Count}) does not match the given ArgCount ({ArgCount})");
+            }
+        }
+
+        public MonkeyObject Execute(List<MonkeyObject> args)
+        {
+            // check the arguments
+
+            if (args.Count != ArgCount)
+            {
+                throw new ArgumentException($"args length ({args.Count}) does not match the function's ArgCount ({ArgCount})");
+            }
+
+            for (int i = 0; i < args.Count; i++)
+            {
+                if (args[i].ObjectType() != ArgTypes[i])
+                {
+                    return new MError($"Type error: expected {ArgTypes[i]}, got {args[i].GetType()}");
+                }
+            }
+
+            // run the function
+            return F.Invoke(args);
+        }
+
+        public MonkeyObjType ObjectType()
+        {
+            return MonkeyObjType.MBuiltin;
+        }
+
+        public string Inspect()
+        {
+            return "Builtin Operation";
+        }
+
+        public override string ToString()
+        {
+            return Inspect();
+        }
+    }
+
     public class Evaluator
     {
         public MonkeyObject Eval(Node node, Environment env)
@@ -343,9 +427,15 @@ namespace Interpreter
                 return new MError($"Invalid rvalue: null cannot be an rvalue");
             }
 
-            env.Set(s.Name.Value, value);
-
-            return new MNull();
+            bool result = env.Set(s.Name.Value, value);
+            if (result)
+            {
+                return new MNull();
+            }
+            else
+            {
+                return new MError($"Cannot use variable name {s.Name}");
+            }
         }
 
         private MonkeyObject EvalIdentifier(Identifier i, Environment env)
@@ -378,6 +468,14 @@ namespace Interpreter
 
         private MonkeyObject EvalFunctionLiteral(FunctionLiteral f, Environment env)
         {
+            foreach (Identifier id in f.Args)
+            {
+                if (Environment.BuiltinNames.Contains(id.Value))
+                {
+                    return new MError($"Illegal function argument name: {id.Value}");
+                }
+            }
+
             return new MFunction(f, env);
         }
 
@@ -679,11 +777,30 @@ namespace Interpreter
                     {
                         return cArgValue;
                     }
-                    internalEnv.Set(f.Args[i].Value, cArgValue);
+                    bool result = internalEnv.Set(f.Args[i].Value, cArgValue);
+
+                    if (!result)
+                    {
+                        return new MError($"Illegal function argument name: {f.Args[i].Value}");
+                    }
                 }
 
                 // evaluate the function
                 return EvalBlock(f.Body, internalEnv);
+            }
+            else if (fResult is MBuiltin fBuiltin)
+            {
+                List<MonkeyObject> args = new List<MonkeyObject>();
+                foreach (Expression a in c.Args)
+                {
+                    MonkeyObject evaluated = Eval(a, env);
+                    if (evaluated is MError)
+                    {
+                        return evaluated;
+                    }
+                    args.Add(evaluated);
+                }
+                return fBuiltin.Execute(args);
             }
             else if (fResult is MError)
             {
